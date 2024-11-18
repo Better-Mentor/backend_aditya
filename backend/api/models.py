@@ -4,7 +4,7 @@ from django.db import models
 class Student(models.Model):
     reg_no = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=100)
-    grade_history_chart = models.JSONField(null=True,blank=True)
+    mcq_taken=models.ManyToManyField('MCQ',blank=True,null=True)
     def __str__(self):
         return f'{self.name} {self.id}'
 
@@ -13,6 +13,7 @@ class Student(models.Model):
 class MCQ(models.Model):
     title = models.CharField(max_length=200)
     mcq_id=models.AutoField(primary_key=True)
+    subject=models.ForeignKey('Subject',on_delete=models.CASCADE)
     def __str__(self):
         return f"{self.title} - {self.mcq_id}"
 
@@ -25,7 +26,11 @@ class Question(models.Model):
 
     def __str__(self):
         return f"Question: {self.question_text} (MCQ ID: {self.mcq.mcq_id})"
+class Subject(models.Model):
+    name=models.CharField(max_length=100)
 
+    def __str__(self):
+        return f"{self.name} {self.id}"
 
 class Teacher(models.Model):
     teacher_id = models.AutoField(primary_key=True)

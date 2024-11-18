@@ -1,8 +1,9 @@
 
 from django.http import JsonResponse
+from django.db.models import F
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Student, MCQ, Teacher, Class,Question
+from .models import Student, MCQ, Teacher, Class,Question,Subject
 from .serializers import StudentSerializer, MCQSerializer, TeacherClassSerializer, StudentInClassSerializer
 from .mcq_analyzer import MCQAnalyzer
 analyzer = MCQAnalyzer()
@@ -13,12 +14,47 @@ def student_dashboard(request):
     if not student:
         return JsonResponse({'error': 'Student not found'}, status=404)
 
-    mcq_ids = list(MCQ.objects.values_list('mcq_id', flat=True))
+    mcqs_taken_ls = list(student.mcq_taken.values('mcq_id', 'title'))  # Fetch mcq_id and title
+    class_stud=Class.objects.get(students__reg_no=reg_no)
+
+    mcqs_taken = student.mcq_taken.all()
+    # Get all MCQs in the system
+    all_mcqs = MCQ.objects.all()
+    
+    # Dictionary to store counts per subject
+    subject_mcq_count = {}
+    subject_mcqs_taken = {}
+    
+    # Calculate total MCQs per subject
+    for mcq in all_mcqs:
+        subject_name = mcq.subject.name
+        if subject_name not in subject_mcq_count:
+            subject_mcq_count[subject_name] = 0
+        subject_mcq_count[subject_name] += 1
+    
+    # Calculate MCQs taken per subject
+    for mcq in mcqs_taken:
+        subject_name = mcq.subject.name
+        if subject_name not in subject_mcqs_taken:
+            subject_mcqs_taken[subject_name] = 0
+        subject_mcqs_taken[subject_name] += 1
+    
+    # Calculate the percentage for each subject
+    result = {}
+    for subject_name, total_mcqs in subject_mcq_count.items():
+        taken_mcqs = subject_mcqs_taken.get(subject_name, 0)
+        percentage_taken = (taken_mcqs / total_mcqs) * 100
+        result[subject_name] = round(percentage_taken, 2)  # Round to 2 decimal places
     response_data = {
         'Student name': student.name,
-        'Grade History Chart': student.grade_history_chart,
-        'mcqIDs': mcq_ids
+        'mcq_taken': mcqs_taken_ls,
+        'all_mcqs': list(all_mcqs.annotate(subject_name=F('subject__name')).values('mcq_id','title','subject_name')),
+        'class':(class_stud).name,
+        'teacher':class_stud.teacher.name,
+        'mcqs_taken_data':result
+
     }
+    print(response_data)
     return JsonResponse(response_data)
 
 @api_view(['POST'])
@@ -78,8 +114,49 @@ def analyze_mcq(request):
         })
     print(analysis_data)
     results = analyzer.analyze_test_performance(analysis_data)
-
+    stud=Student.objects.get(reg_no=reg_no)
+    stud.mcq_taken.add(mcq)
     return Response({"analysis_data": results})
+
+@api_view(['GET'])
+def getCompleted(request,reg_no):
+    # Get the student object
+    stud = Student.objects.filter(reg_no=reg_no).first()
+    if not stud:
+        return JsonResponse({'error': 'Student not found'}, status=404)
+    
+    # Get all MCQs taken by the student
+    mcqs_taken = stud.mcq_taken.all()
+    # Get all MCQs in the system
+    all_mcqs = MCQ.objects.all()
+    
+    # Dictionary to store counts per subject
+    subject_mcq_count = {}
+    subject_mcqs_taken = {}
+    
+    # Calculate total MCQs per subject
+    for mcq in all_mcqs:
+        subject_name = mcq.subject.name
+        if subject_name not in subject_mcq_count:
+            subject_mcq_count[subject_name] = 0
+        subject_mcq_count[subject_name] += 1
+    
+    # Calculate MCQs taken per subject
+    for mcq in mcqs_taken:
+        subject_name = mcq.subject.name
+        if subject_name not in subject_mcqs_taken:
+            subject_mcqs_taken[subject_name] = 0
+        subject_mcqs_taken[subject_name] += 1
+    
+    # Calculate the percentage for each subject
+    result = {}
+    for subject_name, total_mcqs in subject_mcq_count.items():
+        taken_mcqs = subject_mcqs_taken.get(subject_name, 0)
+        percentage_taken = (taken_mcqs / total_mcqs) * 100
+        result[subject_name] = round(percentage_taken, 2)  # Round to 2 decimal places
+    
+    return JsonResponse(result)
+
 
 
 @api_view(['GET'])
@@ -111,10 +188,10 @@ def student_details(request, studentID):
 def upload_mcq(request):
     title = request.data.get('title')
     questions_data = request.data.get('questions')  # Array of questions with options and correct answers
-
+    subject=Subject.objects.get(name=request.data.get('subject'))
     # Create MCQ instance
-    mcq = MCQ.objects.create(title=title)
-
+    mcq = MCQ.objects.create(title=title,subject_id=subject.id)
+    
     # Add each question to the MCQ
     for q_data in questions_data:
         question_text = q_data['question']
@@ -128,6 +205,7 @@ def upload_mcq(request):
             options=options,
             correct_answer=correct_answer
         )
-
+    
+    
     return Response({"message": "MCQ uploaded successfully", "mcq_id": mcq.mcq_id})
 

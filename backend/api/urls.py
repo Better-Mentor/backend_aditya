@@ -10,4 +10,5 @@ urlpatterns = [
     path('teacher/class/<int:classID>', views.class_details, name='class_details'),
     path('teacher/class/stud/<int:studentID>', views.student_details, name='student_details'),
     path('teacher/uploadMCQ', views.upload_mcq, name='upload_mcq'),
+    path('student/getComplete/<str:reg_no>',views.getCompleted,name='get_complete')
 ]
